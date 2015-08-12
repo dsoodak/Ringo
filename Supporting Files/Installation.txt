@@ -1,0 +1,11 @@
+Install the Arduino IDE
+Settings:
+  programmer: Arduino as ISP
+  board: Arduino FIO
+  port: whichever one popped up when you plugged in the programmer
+  serial monitor settings: 57600 baud, and for some of the examples, "add newline"
+Make copy of these folders in "libraries" directory (ex: C:\Program Files (x86)\Arduino\libraries)
+  RingoWire
+  Adafruit_NeoPixel (use this copy or go to their website for the latest version)
+  
+
