@@ -455,7 +455,7 @@ template <class T> int EEPROM_readAnything(int ee, T& value)
   //
   //Edit this section for each use:
   typedef struct RecordedDataStruct{int left; int rear; int right;uint32_t pos;};//can edit number, names, and data types
-  #define RECORDED_DATA_ARRAY_LENGTH 1 //set to 1 if not using
+  #define RECORDED_DATA_ARRAY_LENGTH 40 //set to 1 if not using
   #define RecordedDataPrintRow() do{Serial.print(RecordedDataRow.left,DEC);Serial.print("\t");Serial.print(RecordedDataRow.rear,DEC);Serial.print("\t");Serial.print(RecordedDataRow.right,DEC);Serial.print("\t");Serial.print(RecordedDataRow.pos);}while(0)
  //
   

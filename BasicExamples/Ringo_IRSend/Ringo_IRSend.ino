@@ -18,7 +18,7 @@ void setup(){
   //
 }
 
-char data[]={0x00,0xFF,0x45,0xBA};
+unsigned char data[]={0x00,0xFF,0x45,0xBA};
 void loop(){ 
   SwitchMotorsToSerial();
   SwitchPixelsToButton();

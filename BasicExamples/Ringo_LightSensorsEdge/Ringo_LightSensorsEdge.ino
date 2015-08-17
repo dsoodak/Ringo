@@ -1,7 +1,7 @@
 
 
 
-//Version 1.0 7/2015
+//Version 1.1 7/2015
 //This code is licensed under:
 //Creative Commons Attribution-ShareAlike 2.0 Generic (CC BY-SA 2.0)
 //https://creativecommons.org/licenses/by-sa/2.0/

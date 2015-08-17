@@ -1,6 +1,6 @@
 /*
 
-Ringo Robot:  RingoHardware  Rev01.01  08/2015
+Ringo Robot:  RingoHardware  Rev01.02  08/2015
 
 This code was written by Plum Geek LLC primarily 
 by Dustin Soodak with some editing and additional 
@@ -167,7 +167,7 @@ int ReadRearLightSensor(void){//Ver. 1.0, Dustin Soodak
 int RightLightLevel,LeftLightLevel,RearLightLevel,RightEdgeLightLevel,LeftEdgeLightLevel,RearEdgeLightLevel;
 int RearAmbientLightLevel,RightAmbientLightLevel,LeftAmbientLightLevel;
 
-void ReadEdgeLightSensors(char Averages){//Ver. 1.0, Dustin Soodak
+void ReadEdgeLightSensors(char Averages){//Ver. 1.1, Dustin Soodak
   int i;
   int templeft,tempright,temprear;  
   SwitchAmbientToEdge();
@@ -181,9 +181,9 @@ void ReadEdgeLightSensors(char Averages){//Ver. 1.0, Dustin Soodak
     temprear=ReadRearLightSensor();    
     EdgeLightsOn();
     delayMicroseconds(LIGHT_SENSOR_STABLIZATION_TIME);
-    LeftEdgeLightLevel+=ReadLeftLightSensor()-templeft;
-    RightEdgeLightLevel+=ReadRightLightSensor()-tempright;
-    RearEdgeLightLevel+=ReadRearLightSensor()-temprear;
+    LeftEdgeLightLevel+=ReadLeftLightSensor()-templeft-LEFT_ZERO;
+    RightEdgeLightLevel+=ReadRightLightSensor()-tempright-RIGHT_ZERO;
+    RearEdgeLightLevel+=ReadRearLightSensor()-temprear-REAR_ZERO;
     EdgeLightsOff(); 
     delayMicroseconds(LIGHT_SENSOR_STABLIZATION_TIME);   
   }
@@ -192,28 +192,44 @@ void ReadEdgeLightSensors(char Averages){//Ver. 1.0, Dustin Soodak
   if(RearEdgeLightLevel<0) RearEdgeLightLevel=0; else RearEdgeLightLevel/=Averages;
 }
 
+#ifdef RUNNING_AVERAGE
 int LeftEdgeArray[8];
 int RightEdgeArray[8];
 int RearEdgeArray[8];
 char EdgeArrayPos=0;
-int LeftEdgeSensorAverage=0,RightEdgeSensorAverage=0,RearEdgeSensorAverage=0;
 int LeftEdgeSensorAverageTimes8=0,RightEdgeSensorAverageTimes8=0,RearEdgeSensorAverageTimes8=0;
+#endif
+#ifdef TIME_ADJUSTED_AVERAGE
+float LookAtEdgeStabilizationTime=STABILIZATION_TIME_DEFAULT;
+int LeftEdgeSensorValuePrevious,RightEdgeSensorValuePrevious,RearEdgeSensorValuePrevious;
+#endif
+
+int LeftEdgeSensorAverage=0,RightEdgeSensorAverage=0,RearEdgeSensorAverage=0;
 int LeftEdgeSensorValue=0,RightEdgeSensorValue=0,RearEdgeSensorValue;
 uint32_t LookAtEdgePrevTimeUs;//so LookAtEdge() can be paused until sensors have stabilized from previous time
+float LookAtEdgeTimeBetweenReadings=1.0;//can be used to check how long since the last time LookAtEdge() was called.
 void ResetLookAtEdge(void){//Ver. 1.0, Dustin Soodak
   char i;
+  #ifdef RUNNING_AVERAGE
   for(i=0;i<8;i++){
     LeftEdgeArray[i]=0;
     RightEdgeArray[i]=0;
     RearEdgeArray[i]=0;
   }
-  EdgeArrayPos=0;
-  LeftEdgeSensorAverage=0;
-  LeftEdgeSensorAverageTimes8=0;
-  RightEdgeSensorAverage=0;
-  RightEdgeSensorAverageTimes8=0;
-  RearEdgeSensorAverage=0;
+  EdgeArrayPos=0;  
+  LeftEdgeSensorAverageTimes8=0;  
   RearEdgeSensorAverageTimes8=0;
+  RightEdgeSensorAverageTimes8=0;  
+  LeftEdgeSensorAverage=0;
+  RightEdgeSensorAverage=0;
+  RearEdgeSensorAverage=0;  
+  #endif//end #ifdef RUNNING_AVERAGE
+  #ifdef TIME_ADJUSTED_AVERAGE
+  ReadEdgeLightSensors(1);
+  LeftEdgeSensorValuePrevious=LeftEdgeSensorValue;
+  RearEdgeSensorValuePrevious=RearEdgeSensorValue;
+  RightEdgeSensorValuePrevious=RightEdgeSensorValue;
+  #endif
   LookAtEdgePrevTimeUs=micros();
   for(i=0;i<8;i++){
     LookAtEdge(); 
@@ -222,18 +238,22 @@ void ResetLookAtEdge(void){//Ver. 1.0, Dustin Soodak
 
 
 
-void LookAtEdge(void){//Ver. 1.0, Dustin Soodak
+void LookAtEdge(void){//Ver. 1.1, Dustin Soodak
   //note: ir remote control signals don't usually get into the edge sensors
-  uint32_t us=micros();
+  uint32_t us;
+  #ifdef TIME_ADJUSTED_AVERAGE
+  float r1,r2;
+  LeftEdgeSensorValuePrevious=LeftEdgeSensorValue;
+  RearEdgeSensorValuePrevious=RearEdgeSensorValue;
+  RightEdgeSensorValuePrevious=RightEdgeSensorValue;
+  #endif
+  us=micros();
   if(us-LookAtEdgePrevTimeUs<LIGHT_SENSOR_STABLIZATION_TIME){
     delayMicroseconds(LIGHT_SENSOR_STABLIZATION_TIME-(us-LookAtEdgePrevTimeUs));
   }    
+  
   //Serial.println(micros()-us);//remove!!!
-  SwitchAmbientToEdge();
-  EdgeArrayPos=(EdgeArrayPos+1)&7;// pos=(pos+1) mod 8
-  LeftEdgeSensorAverageTimes8-=LeftEdgeArray[EdgeArrayPos];
-  RightEdgeSensorAverageTimes8-=RightEdgeArray[EdgeArrayPos];
-  RearEdgeSensorAverageTimes8-=RearEdgeArray[EdgeArrayPos];
+  SwitchAmbientToEdge();  
   //Measure
   LeftEdgeSensorValue=ReadLeftLightSensor();
   RightEdgeSensorValue=ReadRightLightSensor();   
@@ -243,8 +263,12 @@ void LookAtEdge(void){//Ver. 1.0, Dustin Soodak
   LeftEdgeSensorValue=ReadLeftLightSensor()-LeftEdgeSensorValue;
   RightEdgeSensorValue=ReadRightLightSensor()-RightEdgeSensorValue;
   RearEdgeSensorValue=ReadRearLightSensor()-RearEdgeSensorValue;
-  EdgeLightsOff();
+  EdgeLightsOff();  
+  LookAtEdgeTimeBetweenReadings=((float)us-LookAtEdgePrevTimeUs);
   LookAtEdgePrevTimeUs=micros();
+  if(LookAtEdgeTimeBetweenReadings<(LIGHT_SENSOR_STABLIZATION_TIME))
+    LookAtEdgeTimeBetweenReadings=(LIGHT_SENSOR_STABLIZATION_TIME);
+  LookAtEdgeTimeBetweenReadings*=0.001;
   //Process data
   if(LeftEdgeSensorValue<0)//so can always use "/2" -> ">>1" trick so no divisions have to be done.
     LeftEdgeSensorValue=0;
@@ -254,6 +278,11 @@ void LookAtEdge(void){//Ver. 1.0, Dustin Soodak
   if(RearEdgeSensorValue<0){//so can always use "/2" -> ">>1" trick so no divisions have to be done.
     RearEdgeSensorValue=0; 
   }
+  #ifdef RUNNING_AVERAGE
+  EdgeArrayPos=(EdgeArrayPos+1)&7;// pos=(pos+1) mod 8
+  LeftEdgeSensorAverageTimes8-=LeftEdgeArray[EdgeArrayPos];
+  RightEdgeSensorAverageTimes8-=RightEdgeArray[EdgeArrayPos];
+  RearEdgeSensorAverageTimes8-=RearEdgeArray[EdgeArrayPos];
   LeftEdgeArray[EdgeArrayPos]=LeftEdgeSensorValue;
   RightEdgeArray[EdgeArrayPos]=RightEdgeSensorValue;
   RearEdgeArray[EdgeArrayPos]=RearEdgeSensorValue;
@@ -263,73 +292,95 @@ void LookAtEdge(void){//Ver. 1.0, Dustin Soodak
   LeftEdgeSensorAverage=LeftEdgeSensorAverageTimes8>>3;
   RightEdgeSensorAverage=RightEdgeSensorAverageTimes8>>3;
   RearEdgeSensorAverage=RearEdgeSensorAverageTimes8>>3;
+  #endif
+  #ifdef TIME_ADJUSTED_AVERAGE
+  //TimeAdjustedAverage=NewValue*(dt/totalT)+AverageValue*((totalT-dt)/totalT)
+  //                   =(1/totalT)*(NewValue*dt+AverageValue*(totalT-dt))
+  //                   dt=LookAtEdgeTimeBetweenReadings
+  //                   totalT=LookAtEdgeStabilizationTime
+  //                   AverageValue=, for example, LeftEdgeSensorAverage
+  //                   NewValue=, for example, LeftEdgeSensorValue
+  //                   generally make sure totalT/dt>=8 so average isn't changed too much by new value
+  //                   
+  r2=1/LookAtEdgeStabilizationTime;
+  r1=LookAtEdgeTimeBetweenReadings*r2;
+  if(r1>.125){
+    r1=.125;
+    r2=.875;
+  }
+  else
+    r2=(LookAtEdgeStabilizationTime-LookAtEdgeTimeBetweenReadings)*r2;
+  LeftEdgeSensorAverage=LeftEdgeSensorValue*r1+LeftEdgeSensorAverage*r2;
+  RearEdgeSensorAverage=RearEdgeSensorValue*r1+RearEdgeSensorAverage*r2;
+  RightEdgeSensorAverage=RightEdgeSensorValue*r1+RightEdgeSensorAverage*r2;
+  #endif
+ 
 }
+
+
+char IsOverEdge(void){//Ver 1.0, Dustin Soodak
+  char edge=0;
+  int Dark1,Dark2,Bright1,Bright2;
+  //Absolute endpoint tests:
+  #ifdef DARK_MIN
+  edge|=LeftEdgeSensorValue<DARK_MIN?LEFT_DARK:0;
+  edge|=RightEdgeSensorValue<DARK_MIN?RIGHT_DARK:0;
+  edge|=RearEdgeSensorValue<DARK_MIN?REAR_DARK:0;
+  #endif
+  #ifdef LIGHT_MAX
+  edge|=LeftEdgeSensorValue>LIGHT_MAX?LEFT_BRIGHT:0;
+  edge|=RearEdgeSensorValue>LIGHT_MAX?REAR_BRIGHT:0;
+  edge|=RightEdgeSensorValue>LIGHT_MAX?RIGHT_BRIGHT:0;
+  #endif  
+
+  //More sensitive tests in case this is being called really often:
+  #ifdef CHECK_EDGE_TWICE
+  if(!LeftDarkDetected(edge)){    
+    edge|=((LeftEdgeSensorValue<DarkEdgeMult2(LeftEdgeSensorAverage) && LeftEdgeSensorValuePrev()<DarkEdgeMult1(LeftEdgeSensorAverage))?LEFT_DARK:0);
+    if(!LeftDarkDetected(edge))
+      edge|=((LeftEdgeSensorValue>BrightEdgeMult2(LeftEdgeSensorAverage) && LeftEdgeSensorValuePrev()>BrightEdgeMult1(LeftEdgeSensorAverage))?LEFT_BRIGHT:0);
+  }
+  if(!RearDarkDetected(edge)){
+    edge|=((RearEdgeSensorValue<DarkEdgeMult2(RearEdgeSensorAverage) && RearEdgeSensorValuePrev()<DarkEdgeMult1(RearEdgeSensorAverage))?REAR_DARK:0);
+    if(!RearDarkDetected(edge))
+      edge|=((RearEdgeSensorValue>BrightEdgeMult2(RearEdgeSensorAverage) && RearEdgeSensorValuePrev()>BrightEdgeMult1(RearEdgeSensorAverage))?REAR_BRIGHT:0);
+  }
+  if(!RightDarkDetected(edge)){
+    edge|=((RightEdgeSensorValue<DarkEdgeMult2(RightEdgeSensorAverage) && RightEdgeSensorValuePrev()<DarkEdgeMult1(RightEdgeSensorAverage))?RIGHT_DARK:0);
+    if(!RightDarkDetected(edge))
+      edge|=((RightEdgeSensorValue>BrightEdgeMult2(RightEdgeSensorAverage) && RightEdgeSensorValuePrev()>BrightEdgeMult1(RightEdgeSensorAverage))?RIGHT_BRIGHT:0);
+  }
+  #endif //end check once
+  #ifndef CHECK_EDGE_TWICE  
+  if(!LeftDarkDetected(edge)){
+    edge|=((LeftEdgeSensorValue<DarkEdgeMult1(LeftEdgeSensorAverage))?LEFT_DARK:0);
+    if(!LeftDarkDetected(edge))
+      edge|=((LeftEdgeSensorValue>BrightEdgeMult1(LeftEdgeSensorAverage))?LEFT_BRIGHT:0);
+  }
+  if(!RearDarkDetected(edge)){
+    edge|=((RearEdgeSensorValue<DarkEdgeMult1(RearEdgeSensorAverage))?REAR_DARK:0);
+    if(!RearDarkDetected(edge))
+      edge|=((RearEdgeSensorValue>BrightEdgeMult1(RearEdgeSensorAverage))?REAR_BRIGHT:0);
+  }
+  if(!RightDarkDetected(edge)){
+    edge|=((RightEdgeSensorValue<DarkEdgeMult1(RightEdgeSensorAverage)))?BRIGHT_DARK:0);
+    if(!RightDarkDetected(edge))
+      edge|=((RightEdgeSensorValue>BrightEdgeMult1(RightEdgeSensorAverage))?BRIGHT_BRIGHT:0);
+  }
+  #endif// end check twice
+  return edge;
+}//end IsOverEdge
 
 
 // calls LookAtEdge(), and uses running average to detect edges or white tape.
 // Output bit num: 0: right dark edge (0x01)(0b000001)  1: right bright edge (0x02)(0b000010)   
 //                 2: rear dark edge (0x04)(0b000100)   3: rear bright edge (0x08)(0b001000)  
 //                 4: left dark edge (0x10)(0b010000)   5: left bright edge (0x20)(0b100000)
-char LookForEdge(void){//Ver. 1.0, Dustin Soodak
-  //is an edge if a sensor's value drops below 7/8 of average, then below 6/8 of average on next reading
-  char Left=0,Right=0,Rear=0;
-  int LastLeftAver,LastRightAver,LastRearAver;
-  LookAtEdge();      
-  //look for edge
-  Left= (LeftEdgeSensorValue<DARK_MIN || LeftEdgeSensorValue<DarkEdgeMult1(LeftEdgeSensorAverage))?Left+1:0;
-  Right=(RightEdgeSensorValue<DARK_MIN || RightEdgeSensorValue<DarkEdgeMult1(RightEdgeSensorAverage))?Right+1:0;
-  Rear=(RearEdgeSensorValue<DARK_MIN_REAR || RearEdgeSensorValue<DarkEdgeMult1(RearEdgeSensorAverage))?Right+1:0;
-  if(Left || Right || Rear){  
-    #ifdef CHECK_EDGE_TWICE
-    //look for edge or black marker
-    LastLeftAver=LeftEdgeSensorAverage;
-    LastRightAver=RightEdgeSensorAverage; 
-    LastRearAver=RearEdgeSensorAverage;
-    //Serial.print(LeftEdgeSensorValue);Serial.print("\t");Serial.print(LeftEdgeSensorAverage);Serial.print("\t");
-    //Serial.print(RearEdgeSensorValue);Serial.print("\t");Serial.print(RearEdgeSensorAverage);Serial.print("\t");
-    //Serial.print(RightEdgeSensorValue);Serial.print("\t");Serial.print(RightEdgeSensorAverage);Serial.println("\t1");
-    LookAtEdge();
-    if(Left)
-      Left=(LeftEdgeSensorValue<DARK_MIN || LeftEdgeSensorValue<DarkEdgeMult2(LastLeftAver))?Left+1:0;
-    if(Right)
-      Right=(RightEdgeSensorValue<DARK_MIN || RightEdgeSensorValue<DarkEdgeMult2(LastRightAver))?Right+1:0;
-    if(Rear)
-      Rear=(RearEdgeSensorValue<DARK_MIN || RearEdgeSensorValue<DarkEdgeMult2(LastRearAver))?Rear+1:0;
-    //if(Left||Right||Rear){
-    //  Serial.print(LeftEdgeSensorValue);Serial.print("\t");Serial.print(LeftEdgeSensorAverage);Serial.print("\t");
-    //  Serial.print(RearEdgeSensorValue);Serial.print("\t");Serial.print(RearEdgeSensorAverage);Serial.print("\t");
-    //  Serial.print(RightEdgeSensorValue);Serial.print("\t");Serial.print(RightEdgeSensorAverage);Serial.println("\t2");
-    //}    
-    return (Left==2?0x10:0)|(Rear==2?0x04:0)|(Right==2?0x01:0);
-    #endif
-    #ifndef CHECK_EDGE_TWICE
-    return (Left?0x10:0)|(Rear?0x04:0)|(Right?0x01:0);
-    #endif
-  }//end looking for dark tape or edge of table
-  else{
-    //look for white tape
-    Left=(LeftEdgeSensorValue>LIGHT_MAX || LeftEdgeSensorValue>LightEdgeMult1(LeftEdgeSensorAverage))?Left+1:0;
-    Right=(RightEdgeSensorValue>LIGHT_MAX || RightEdgeSensorValue>LightEdgeMult1(RightEdgeSensorAverage))?Right+1:0; 
-    Rear=(RearEdgeSensorValue>LIGHT_MAX || RearEdgeSensorValue>LightEdgeMult1(RearEdgeSensorAverage))?Rear+1:0; 
-    #ifdef CHECK_EDGE_TWICE
-    if(Left || Right || Rear){   
-      LastLeftAver=LeftEdgeSensorAverage;
-      LastRightAver=RightEdgeSensorAverage; 
-      LastRearAver=RearEdgeSensorAverage; 
-      LookAtEdge();
-      if(Left)
-        Left=(LeftEdgeSensorValue>LIGHT_MAX || LeftEdgeSensorValue>LightEdgeMult2(LastLeftAver))?Left+1:0;
-      if(Right)
-        Right=(RightEdgeSensorValue>LIGHT_MAX || RightEdgeSensorValue>LightEdgeMult2(LastRightAver))?Right+1:0;
-      if(Rear)
-        Rear=(RearEdgeSensorValue>LIGHT_MAX || RearEdgeSensorValue>LightEdgeMult2(LastRearAver))?Rear+1:0;
-    }    
-    return (Left==2?0x20:0)|(Rear==2?0x08:0)|(Right==2?0x02:0);   
-    #endif
-    #ifndef CHECK_EDGE_TWICE
-    return (Left?0x20:0)|(Rear?0x08:0)|(Right?0x02:0); 
-    #endif
-  }//end looking for white tape
+char LookForEdge(void){//Ver. 1.1, Dustin Soodak
+  //Ver. 1.1:
+  LookAtEdge();
+  return IsOverEdge();
+  
 }
 
 
@@ -599,14 +650,16 @@ void SetPixelRGB(int Pixel, int Red, int Green, int Blue){//Ver. 1.0, Dustin Soo
   if(Pixel<0)
     Pixel=0;
   pixels.setPixelColor(Pixel, pixels.Color(Red,Green,Blue));
-  pixels.show();
+  pixels.show();//Remove this line and use RefreshPixels() below 
+  //              if you want to set several at once for high-speed patterns.
 }
-void SetAllPixelsRGB(int Red, int Green, int Blue){//Ver. 1.0, Dustin Soodak
+void SetAllPixelsRGB(int Red, int Green, int Blue){//Ver. 1.1, Dustin Soodak
+  SwitchButtonToPixels();
   char i;
   for(i=0;i<NUM_PIXELS;i++){
     pixels.setPixelColor(i, pixels.Color(Red,Green,Blue)); 
   }
-  pixels.show();   
+  pixels.show();//added Ver.1.1
 }
 void RefreshPixels(void){//Ver. 1.0, Dustin Soodak
   pixels.show();  
@@ -928,7 +981,7 @@ void PlayChirpIR(unsigned int Frequency, unsigned int OnTime){//Ver. 1.0, Dustin
 
   //Ver. 1.0, Dustin Soodak
   //Global variables:
-  RecordedDataStruct Data;
+  RecordedDataStruct RecordedDataRow;
   RecordedDataStruct RecordedDataArray[RECORDED_DATA_ARRAY_LENGTH];
   unsigned char RecordedDataLength=0;
   unsigned char RecordedDataPosition=0;
@@ -936,7 +989,7 @@ void PlayChirpIR(unsigned int Frequency, unsigned int OnTime){//Ver. 1.0, Dustin
   uint32_t RecordedDataStart,RecordedDataPrev;
   uint16_t RecordedDataMinDelay;
       
-  //Data.ms=RecordedDataTime()/1000;Data.degr=GetDegrees();RecordedDataRefresh();
+  //RecordedDataRow.ms=RecordedDataTime()/1000;RecordedDataRow.degr=GetDegrees();RecordedDataRefresh();
   
 // ***************************************************
 // end Recorded Data
